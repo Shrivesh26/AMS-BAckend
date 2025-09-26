@@ -1,0 +1,20 @@
+{
+  "name": "@ams/shared",
+  "version": "1.0.0",
+  "description": "Shared libraries and utilities for AMS microservices",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "joi": "^17.9.2",
+    "mongoose": "^8.18.0",
+    "winston": "^3.10.0",
+    "dotenv": "^17.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^3.0.2"
+  },
+  "devDependencies": {
+    "jest": "^29.6.2"
+  }
+}
