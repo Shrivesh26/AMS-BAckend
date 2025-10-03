@@ -5,6 +5,17 @@ const { authorize, tenantIsolation } = require('../middleware/auth');
 
 const router = express.Router();
 
+// @route   GET /api/customers/:customerId/services
+// @desc    Get all services for a customer (all linked providers)
+// @access  Private
+router.get('/customers/:customerId', serviceController.getServicesForCustomer);
+// router.get('/customers/:customerId/services', serviceController.getServicesForCustomer);
+
+// @desc    Get services for a specific provider
+// @route   GET /api/services/providers/:providerId
+// @access  Private
+router.get('/providers/:providerId', serviceController.getServicesForProvider);
+
 // Apply tenant isolation to all routes
 router.use(tenantIsolation);
 

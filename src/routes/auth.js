@@ -2,6 +2,8 @@ const express = require('express');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
+const multer = require('multer');
+const upload = multer();
 
 const router = express.Router();
 
@@ -30,7 +32,7 @@ const resetPasswordValidation = [
 // @route   POST /api/auth/register
 // @desc    Register user
 // @access  Public
-router.post('/register', registerValidation, authController.register);
+router.post('/register', upload.none(), registerValidation, authController.register);
 
 // @route   POST /api/auth/login
 // @desc    Login user

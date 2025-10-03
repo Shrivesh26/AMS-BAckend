@@ -6,6 +6,7 @@ const Tenant = require('../models/Tenant');
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res, next) => {
+  console.log('Received registration body:', req.body);
   try {
     // Check validation errors
     const errors = validationResult(req);
@@ -84,8 +85,14 @@ exports.register = async (req, res, next) => {
       email,
       password,
       role,
-      tenant: tenant._id
+      tenant: tenant._id,
+      profile: req.body.profile,
+      availability: req.body.availability,
+      address: req.body.address,
+      preferences: req.body.preferences
     });
+
+
 
     sendTokenResponse(user, 201, res);
   } catch (error) {
