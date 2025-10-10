@@ -2,13 +2,11 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const userSchema = new mongoose.Schema({
+const serviceProviderSchema = new mongoose.Schema({
   tenant: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
-    required: function() {
-      return this.role !== 'admin';
-    }
+    required: true
   },
   firstName: {
     type: String,
@@ -41,12 +39,44 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'tenant', 'service_provider', 'customer'],
-    required: [true, 'User role is required']
+    default: 'service_provider',
+    enum: ['service_provider']
+  },
+  bio: {
+    type: String,
+    maxlength: [500, 'Bio cannot be more than 500 characters']
+  },
+  specializations: {
+    type: [String],
+    default: []
+  },
+  experience: {
+    type: Number,
+    min: 0,
+    max: 60
   },
   profile: {
     avatar: String,
-    bio: String,
+    rating: {
+      average: { type: Number, default: 0 },
+      count: { type: Number, default: 0 }
+    }
+  },
+  availability: {
+    schedule: {
+      monday: [{ start: String, end: String }],
+      tuesday: [{ start: String, end: String }],
+      wednesday: [{ start: String, end: String }],
+      thursday: [{ start: String, end: String }],
+      friday: [{ start: String, end: String }],
+      saturday: [{ start: String, end: String }],
+      sunday: [{ start: String, end: String }]
+    },
+    timeOff: [{
+      startDate: Date,
+      endDate: Date,
+      reason: String
+    }]
   },
   address: {
     street: String,
@@ -83,44 +113,36 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create compound index for tenant + email uniqueness within tenant
-userSchema.index({ tenant: 1, email: 1 }, { unique: true });
-// userSchema.index({ email: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ 'address.coordinates': '2dsphere' }); // For location-based searches
+// Indexes for uniqueness and search
+serviceProviderSchema.index({ tenant: 1, email: 1 }, { unique: true });
 
-// Encrypt password using bcrypt
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    next();
-  }
+// Password encryption
+serviceProviderSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
-// Sign JWT and return
-userSchema.methods.getSignedJwtToken = function() {
+// JWT methods etc., like in User model
+serviceProviderSchema.methods.getSignedJwtToken = function() {
   return jwt.sign(
-    { 
+    {
       id: this._id,
       tenant: this.tenant,
       role: this.role
     },
     process.env.JWT_SECRET,
-    {
-      expiresIn: process.env.JWT_EXPIRE,
-    }
+    { expiresIn: process.env.JWT_EXPIRE }
   );
 };
 
-// Match user entered password to hashed password in database
-userSchema.methods.matchPassword = async function(enteredPassword) {
+serviceProviderSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Get full name
-userSchema.virtual('fullName').get(function() {
+serviceProviderSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model('ServiceProvider', serviceProviderSchema);

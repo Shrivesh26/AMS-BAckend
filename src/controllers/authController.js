@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
+const ServiceProvider = require('../models/ServiceProvider');
 const Tenant = require('../models/Tenant');
 
 // @desc    Register user
@@ -8,102 +9,144 @@ const Tenant = require('../models/Tenant');
 exports.register = async (req, res, next) => {
   console.log('Received registration body:', req.body);
   try {
-    // Check validation errors
+    // Handle validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      return res.status(400).json({ 
         success: false,
         message: 'Validation failed',
         errors: errors.array()
       });
     }
 
-    const { firstName, lastName, email, password, role, tenantId, tenantData } = req.body;
-
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    // Parse the complex data payload
+    let data;
+    try {
+      // data = JSON.parse(req.body.data);
+      data = req.body.parsedData;
+    } catch (err) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'Invalid JSON in `data` field'
       });
+    }
+
+    const { firstName, lastName, email, password, role, tenantId, tenantData } = data;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'User already exists with this email' });
+    }
+
+    if (role === 'service_provider') {
+      const existingProvider = await ServiceProvider.findOne({ email });
+      if (existingProvider) {
+        return res.status(400).json({ success: false, message: 'Service provider already exists with this email' });
+      }
     }
 
     let tenant = null;
 
-    // Handle tenant creation for tenant role
     if (role === 'tenant') {
       if (!tenantData) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tenant data is required for tenant registration'
-        });
+        return res.status(400).json({ success: false, message: 'Tenant data is required for tenant registration' });
       }
 
-      // Create new tenant
       tenant = await Tenant.create({
+        firstName,
+        lastName,
         name: tenantData.name,
         subdomain: tenantData.subdomain,
-        email: email,
+        email,
+        password: tenantData.password,
         phone: tenantData.phone,
         business: tenantData.business,
         address: tenantData.address,
         settings: tenantData.settings
       });
-    } else if (role === 'customer') {
-        tenant = await Tenant.findOne(); 
 
-        if (!tenant) {
-          return res.status(400).json({
-            success: false,
-            message: 'No tenants exist to assign customer to'
-          });
+      // Don't create a user if it's just a tenant registration
+      return res.status(201).json({
+        success: true,
+        message: 'Tenant created successfully. Create a service provider to manage it.',
+        data: {
+          tenantId: tenant._id,
+          tenant
         }
+      });
+    } else if (role === 'customer') {
+      tenant = await Tenant.findOne();
+      if (!tenant) {
+        return res.status(400).json({ success: false, message: 'No tenants exist to assign customer to' });
       }
-     else {
-      // For non-tenant roles, tenantId is required
+    } else {
       if (!tenantId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tenant ID is required for this role'
-        });
+        return res.status(400).json({ success: false, message: 'Tenant ID is required for this role' });
       }
-
       tenant = await Tenant.findById(tenantId);
       if (!tenant) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid tenant ID'
-        });
+        return res.status(400).json({ success: false, message: 'Invalid tenant ID' });
       }
     }
 
-    // Create user
-    const user = await User.create({
+    const avatarFile = req.file;
+
+    // Extract shared profile fields from data
+    const profile = {
+      avatar: avatarFile ? avatarFile.filename : data.profile?.avatar || '',
+      bio: data.profile?.bio || ''
+    };
+
+    let newUser;
+
+    if (role === 'service_provider') {
+      newUser = await ServiceProvider.create({
+        firstName,
+        lastName,
+        email,
+        password,
+        phone: data.phone,
+        tenant: tenant._id,
+        bio: profile.bio,
+        specializations: data.profile?.specializations || [],
+        experience: data.profile?.experience || 0,
+        profile: {
+          avatar: profile.avatar,
+          rating: { average: 0, count: 0 }
+        },
+        availability: data.availability,
+        address: data.address,
+        preferences: data.preferences
+      });
+
+      return sendTokenResponse(newUser, 201, res);
+    }
+
+    // Default user creation (customer or admin)
+    newUser = await User.create({
       firstName,
       lastName,
       email,
       password,
+      phone: data.phone,
       role,
       tenant: tenant._id,
-      profile: req.body.profile,
-      availability: req.body.availability,
-      address: req.body.address,
-      preferences: req.body.preferences
+      profile,
+      availability: data.availability,
+      address: data.address,
+      preferences: data.preferences
     });
 
-
-
-    sendTokenResponse(user, 201, res);
+    return sendTokenResponse(newUser, 201, res);
   } catch (error) {
-    if (error.code === 11000) {
-      const message = 'Duplicate field value entered';
-      return res.status(400).json({
-        success: false,
-        message
-      });
+    if (!res.headersSent) {
+      if (error.code === 11000) {
+        return res.status(400).json({ success: false, message: 'Duplicate field value entered' });
+      }
+      return next(error);
+    } else {
+      console.error('Error after response was sent:', error);
     }
-    next(error);
   }
 };
 
@@ -112,7 +155,6 @@ exports.register = async (req, res, next) => {
 // @access  Public
 exports.login = async (req, res, next) => {
   try {
-    // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -124,8 +166,18 @@ exports.login = async (req, res, next) => {
 
     const { email, password } = req.body;
 
-    // Check for user
-    const user = await User.findOne({ email }).select('+password').populate('tenant');
+    // Check for user in User collection first
+    let user = await User.findOne({ email }).select('+password').populate('tenant');
+
+    // If not found in User, check ServiceProvider collection
+    if (!user) {
+      user = await ServiceProvider.findOne({ email }).select('+password').populate('tenant');
+    }
+
+    // ✅ If not found in ServiceProvider, check Tenant collection
+    if (!user) {
+      user = await Tenant.findOne({ email }).select('+password');
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -136,7 +188,6 @@ exports.login = async (req, res, next) => {
 
     // Check if password matches
     const isMatch = await user.matchPassword(password);
-
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -144,19 +195,21 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Check if user is active
-    if (!user.isActive) {
+    // Optional: add isActive check if you added that to Tenant schema
+    if (user.isActive === false) {
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated'
       });
     }
 
-    // Update last login
+    // Update lastLogin if needed
     user.lastLogin = new Date();
     await user.save();
 
+    // ✅ Modify sendTokenResponse to support Tenant if needed
     sendTokenResponse(user, 200, res);
+
   } catch (error) {
     next(error);
   }
@@ -322,21 +375,26 @@ exports.logout = async (req, res, next) => {
   }
 };
 
-// Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
-  // Create token
+  // Generate token from the model's method
   const token = user.getSignedJwtToken();
+
+  // Determine the role: fallback to "tenant" if undefined
+  const role = user.role || 'tenant';
+
+  // Determine tenant ID
+  const tenantId = user.tenant?._id || user.tenant || (role === 'tenant' ? user._id : null);
 
   res.status(statusCode).json({
     success: true,
     token,
     data: {
       id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName: user.firstName || '', 
+      lastName: user.lastName || '',
       email: user.email,
-      role: user.role,
-      tenant: user.tenant
+      role,
+      tenant: tenantId
     }
   });
 };

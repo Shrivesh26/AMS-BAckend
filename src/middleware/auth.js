@@ -3,14 +3,68 @@ const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 
 // Protect routes
+// exports.protect = async (req, res, next) => {
+//   let token;
+  
+//   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+//     token = req.headers.authorization.split(' ')[1];
+//   }
+
+//   if (!token) {
+//     return res.status(401).json({
+//       success: false,
+//       message: 'Not authorized to access this route'
+//     });
+//   }
+
+//   try {
+//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+//     // Check User collection first
+//     let user = await User.findById(decoded.id).populate('tenant');
+    
+//     // If not found, check ServiceProvider collection
+//     if (!user) {
+//       user = await ServiceProvider.findById(decoded.id).populate('tenant');
+//     }
+
+//     if (!user) {
+//       return res.status(401).json({
+//         success: false,
+//         message: 'No user found with this token'
+//       });
+//     }
+
+//     if (!user.isActive) {
+//       return res.status(401).json({
+//         success: false,
+//         message: 'User account is deactivated'
+//       });
+//     }
+//     // Check if tenant is active (except for admin users)
+//     if (user.role !== 'admin' && user.tenant && !user.tenant.isActive) {
+//       return res.status(401).json({
+//         success: false,
+//         message: 'Tenant account is inactive'
+//       });
+//     }
+//     req.user = user;
+//     next();
+
+//   } catch (error) {
+//     return res.status(401).json({
+//       success: false,
+//       message: 'Not authorized to access this route'
+//     });
+//   }
+// };
 exports.protect = async (req, res, next) => {
   let token;
-
+  
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
   }
 
-  // Make sure token exists
   if (!token) {
     return res.status(401).json({
       success: false,
@@ -19,11 +73,15 @@ exports.protect = async (req, res, next) => {
   }
 
   try {
-    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Get user from token
-    const user = await User.findById(decoded.id).populate('tenant');
+    
+    // Check ServiceProvider collection first
+    let user = await ServiceProvider.findById(decoded.id).populate('tenant');
+    
+    // If not found, check User collection
+    if (!user) {
+      user = await User.findById(decoded.id).populate('tenant');
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -32,14 +90,13 @@ exports.protect = async (req, res, next) => {
       });
     }
 
-    // Check if user is active
     if (!user.isActive) {
       return res.status(401).json({
         success: false,
         message: 'User account is deactivated'
       });
     }
-
+    
     // Check if tenant is active (except for admin users)
     if (user.role !== 'admin' && user.tenant && !user.tenant.isActive) {
       return res.status(401).json({
@@ -47,9 +104,11 @@ exports.protect = async (req, res, next) => {
         message: 'Tenant account is inactive'
       });
     }
-
+    
     req.user = user;
+    req.tenantId = user.tenant?._id || user.tenant;
     next();
+
   } catch (error) {
     return res.status(401).json({
       success: false,

@@ -7,11 +7,6 @@ const router = express.Router();
 
 // Apply tenant isolation to most routes (except admin routes)
 
-// @route   GET /api/users/providers/search
-// @desc    Search service providers
-// @access  Private
-router.get('/providers/search', userController.searchProviders);
-
 // @route   GET /api/users
 // @desc    Get users (admin sees all, others see tenant users)
 // @access  Private
@@ -36,15 +31,5 @@ router.put('/:id', userController.updateUser);
 // @desc    Delete user
 // @access  Private (Admin or Tenant)
 router.delete('/:id', authorize('admin', 'tenant'), userController.deleteUser);
-
-// @route   PUT /api/users/:id/availability
-// @desc    Update provider availability
-// @access  Private (Service Provider or Tenant)
-router.put('/:id/availability', authorize('service_provider', 'tenant'), userController.updateAvailability);
-
-// @route   GET /api/users/:id/schedule
-// @desc    Get provider schedule
-// @access  Private
-router.get('/:id/schedule', userController.getProviderSchedule);
 
 module.exports = router;

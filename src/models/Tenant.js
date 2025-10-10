@@ -1,7 +1,20 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const tenantSchema = new mongoose.Schema({
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true,
+    maxlength: [50, 'First name cannot be more than 50 characters']
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true,
+    maxlength: [50, 'Last name cannot be more than 50 characters']
+  },
   name: {
     type: String,
     required: [true, 'Tenant name is required'],
@@ -22,6 +35,12 @@ const tenantSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please add a valid email']
+  },
+  password:{
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [6, 'Password must be at least 6 characters'],
+    select: false
   },
   phone: {
     type: String,
@@ -71,15 +90,15 @@ const tenantSchema = new mongoose.Schema({
       required: [true, 'Currency is required'],
       // default: 'USD',
     },
-    businessHours: {
-      monday: { start: String, end: String, closed: { type: Boolean, default: false } },
-      tuesday: { start: String, end: String, closed: { type: Boolean, default: false } },
-      wednesday: { start: String, end: String, closed: { type: Boolean, default: false } },
-      thursday: { start: String, end: String, closed: { type: Boolean, default: false } },
-      friday: { start: String, end: String, closed: { type: Boolean, default: false } },
-      saturday: { start: String, end: String, closed: { type: Boolean, default: false } },
-      sunday: { start: String, end: String, closed: { type: Boolean, default: true } }
-    }
+    // businessHours: {
+    //   monday: { start: String, end: String, closed: { type: Boolean, default: false } },
+    //   tuesday: { start: String, end: String, closed: { type: Boolean, default: false } },
+    //   wednesday: { start: String, end: String, closed: { type: Boolean, default: false } },
+    //   thursday: { start: String, end: String, closed: { type: Boolean, default: false } },
+    //   friday: { start: String, end: String, closed: { type: Boolean, default: false } },
+    //   saturday: { start: String, end: String, closed: { type: Boolean, default: false } },
+    //   sunday: { start: String, end: String, closed: { type: Boolean, default: true } }
+    // }
   },
   isActive: {
     type: Boolean,
@@ -92,5 +111,26 @@ const tenantSchema = new mongoose.Schema({
 // Create indexes
 // tenantSchema.index({ subdomain: 1 });
 // tenantSchema.index({ email: 1 });
+tenantSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
+
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Add method to compare password
+tenantSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Tenant.js (or wherever your model is defined)
+tenantSchema.methods.getSignedJwtToken = function () {
+  return jwt.sign(
+    { id: this._id, email: this.email, role: 'tenant', tenant: this._id },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+  );
+};
 
 module.exports = mongoose.model('Tenant', tenantSchema);

@@ -18,7 +18,7 @@ const bookingSchema = new mongoose.Schema({
   },
   provider: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: 'ServiceProvider',
     required: [true, 'Service provider is required']
   },
   appointmentDate: {
@@ -124,7 +124,7 @@ const bookingSchema = new mongoose.Schema({
   cancellation: {
     cancelledBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      ref: 'ServiceProvider'
     },
     cancelledAt: Date,
     reason: String,
@@ -137,7 +137,7 @@ const bookingSchema = new mongoose.Schema({
     rescheduleCount: { type: Number, default: 0 },
     rescheduledBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      ref: 'ServiceProvider'
     },
     rescheduledAt: Date,
     reason: String

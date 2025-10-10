@@ -76,7 +76,7 @@ const serviceSchema = new mongoose.Schema({
   }],
   providers: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'ServiceProvider'
   }],
   requirements: {
     minimumAge: Number,

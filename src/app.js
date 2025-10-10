@@ -14,6 +14,7 @@ const bookingRoutes = require('./routes/booking');
 const userRoutes = require('./routes/user');
 const searchRoutes = require('./routes/search');
 const assetRoutes = require('./routes/asset');
+const serviceProviderRoutes = require('./routes/serviceProvider');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -31,6 +32,7 @@ app.use(helmet());
 //   credentials: true
 // }));
 app.use(cors());
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
@@ -65,6 +67,7 @@ app.use('/api/v1/services', protect, serviceRoutes);
 app.use('/api/v1/bookings', protect, bookingRoutes);
 app.use('/api/v1/users', protect, userRoutes);
 app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/service-providers', protect, serviceProviderRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

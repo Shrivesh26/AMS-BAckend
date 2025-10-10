@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const Service = require('../models/Service');
+const ServiceProvider = require('../models/ServiceProvider');
 const User = require('../models/User');
 
 // @desc    Get all services for tenant
@@ -75,6 +76,10 @@ exports.getService = async (req, res, next) => {
 exports.getServicesForProvider = async (req, res, next) => {
   try {
     const providerId = req.params.providerId;
+    // Optional: validate provider exists
+    const provider = await ServiceProvider.findById(providerId);
+    if (!provider) return res.status(404).json({ message: 'Provider not found' });
+
     // Find all services where this provider is listed
     console.log('Searching with:', {
       providers: providerId,
@@ -121,9 +126,8 @@ exports.getServicesForCustomer = async (req, res, next) => {
     console.log('Found customer:', customer.email, 'Tenant:', customer.tenant);
 
     // Find providers in same tenant
-    const providers = await User.find({
+    const providers = await ServiceProvider.find({
       tenant: customer.tenant,
-      role: 'service_provider',
       isActive: true
     });
 
@@ -132,7 +136,7 @@ exports.getServicesForCustomer = async (req, res, next) => {
     }
 
     const providerIds = providers.map(p => p._id);
-    console.log('Found providers:', providerIds);
+    console.log('Searching services for tenant:', customer.tenant, 'and providerIds:', providerIds);
 
     // Debug: Check what services exist in this tenant
     const allTenantServices = await Service.find({ tenant: customer.tenant });

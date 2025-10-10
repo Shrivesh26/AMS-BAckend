@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const Booking = require('../models/Booking');
 const Service = require('../models/Service');
+const ServiceProvider = require('../models/ServiceProvider');
 const User = require('../models/User');
 
 // @desc    Get bookings (filtered by user role)
@@ -410,14 +411,12 @@ exports.getBookingMetadata = async (req, res, next) => {
       });
     }
 
-    const tenantId = customer.tenant;
-
-    // 2. Find one provider under the same tenant
-    const provider = await User.findOne({ tenant: tenantId, role: 'service_provider' });
+    // 2. Find one service provider under the same tenant
+    const provider = await ServiceProvider.findOne({ tenant: customer.tenant });
     if (!provider) {
       return res.status(404).json({
         success: false,
-        message: 'No provider found for tenant',
+        message: 'No service provider found for tenant',
       });
     }
 
