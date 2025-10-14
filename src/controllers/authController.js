@@ -7,7 +7,7 @@ const Tenant = require('../models/Tenant');
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res, next) => {
-  console.log('Received registration body:', req.body);
+  console.log('Received registration body:', req.body +" "+ req.file);
   try {
     // Handle validation errors
     const errors = validationResult(req);
@@ -22,7 +22,6 @@ exports.register = async (req, res, next) => {
     // Parse the complex data payload
     let data;
     try {
-      // data = JSON.parse(req.body.data);
       data = req.body.parsedData;
     } catch (err) {
       return res.status(400).json({
@@ -45,13 +44,36 @@ exports.register = async (req, res, next) => {
       }
     }
 
+    // ✅ CHECK FOR EXISTING TENANT
+    if (role === 'tenant') {
+      const existingTenant = await Tenant.findOne({ email });
+      if (existingTenant) {
+        return res.status(400).json({ success: false, message: 'Tenant already exists with this email' });
+      }
+    }
+
     let tenant = null;
+
+    // ✅ PROCESS AVATAR FOR ALL ROLES
+    const avatarFile = req.file;
+    let avatarUrl = '';
+    if (avatarFile) {
+      avatarUrl = `${req.protocol}://${req.get('host')}/uploads/${avatarFile.filename}`;
+    } else if (data.profile?.avatar) {
+      avatarUrl = data.profile.avatar;
+    }
+
+    const profile = {
+      avatar: avatarUrl,
+      bio: data.profile?.bio || ''
+    };
 
     if (role === 'tenant') {
       if (!tenantData) {
         return res.status(400).json({ success: false, message: 'Tenant data is required for tenant registration' });
       }
 
+      // ✅ INCLUDE AVATAR IN TENANT CREATION
       tenant = await Tenant.create({
         firstName,
         lastName,
@@ -62,7 +84,8 @@ exports.register = async (req, res, next) => {
         phone: tenantData.phone,
         business: tenantData.business,
         address: tenantData.address,
-        settings: tenantData.settings
+        settings: tenantData.settings,
+        avatarUrl: avatarUrl  // ✅ ADD THIS LINE
       });
 
       // Don't create a user if it's just a tenant registration
@@ -88,14 +111,6 @@ exports.register = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Invalid tenant ID' });
       }
     }
-
-    const avatarFile = req.file;
-
-    // Extract shared profile fields from data
-    const profile = {
-      avatar: avatarFile ? avatarFile.filename : data.profile?.avatar || '',
-      bio: data.profile?.bio || ''
-    };
 
     let newUser;
 
@@ -385,6 +400,14 @@ const sendTokenResponse = (user, statusCode, res) => {
   // Determine tenant ID
   const tenantId = user.tenant?._id || user.tenant || (role === 'tenant' ? user._id : null);
 
+  // ✅ GET AVATAR FROM DIFFERENT SOURCES BASED ON MODEL
+  let avatar = null;
+  if (user.profile?.avatar) {
+    avatar = user.profile.avatar;  // For User and ServiceProvider
+  } else if (user.avatarUrl) {
+    avatar = user.avatarUrl;       // For Tenant
+  }
+
   res.status(statusCode).json({
     success: true,
     token,
@@ -394,7 +417,8 @@ const sendTokenResponse = (user, statusCode, res) => {
       lastName: user.lastName || '',
       email: user.email,
       role,
-      tenant: tenantId
+      tenant: tenantId,
+      avatarUrl: avatar  // ✅ CHANGED FROM 'avatar' to 'avatarUrl' FOR CONSISTENCY
     }
   });
 };

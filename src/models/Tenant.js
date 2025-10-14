@@ -15,6 +15,18 @@ const tenantSchema = new mongoose.Schema({
     trim: true,
     maxlength: [50, 'Last name cannot be more than 50 characters']
   },
+  role: {
+    type: String,
+    default: 'tenant',
+    enum: ['tenant']
+  },
+  
+  // ✅ ADD AVATAR FIELD
+  avatarUrl: {
+    type: String,
+    default: null
+  },
+  
   name: {
     type: String,
     required: [true, 'Tenant name is required'],
@@ -88,17 +100,7 @@ const tenantSchema = new mongoose.Schema({
       type: String,
       enum: ['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD'],
       required: [true, 'Currency is required'],
-      // default: 'USD',
     },
-    // businessHours: {
-    //   monday: { start: String, end: String, closed: { type: Boolean, default: false } },
-    //   tuesday: { start: String, end: String, closed: { type: Boolean, default: false } },
-    //   wednesday: { start: String, end: String, closed: { type: Boolean, default: false } },
-    //   thursday: { start: String, end: String, closed: { type: Boolean, default: false } },
-    //   friday: { start: String, end: String, closed: { type: Boolean, default: false } },
-    //   saturday: { start: String, end: String, closed: { type: Boolean, default: false } },
-    //   sunday: { start: String, end: String, closed: { type: Boolean, default: true } }
-    // }
   },
   isActive: {
     type: Boolean,
@@ -108,12 +110,17 @@ const tenantSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// ✅ ADD VIRTUAL FOR CONSISTENCY WITH OTHER MODELS
+tenantSchema.virtual('profile').get(function() {
+  return {
+    avatar: this.avatarUrl
+  };
+});
+
 // Create indexes
-// tenantSchema.index({ subdomain: 1 });
-// tenantSchema.index({ email: 1 });
 tenantSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
-
+  
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
@@ -127,7 +134,7 @@ tenantSchema.methods.matchPassword = async function (enteredPassword) {
 // Tenant.js (or wherever your model is defined)
 tenantSchema.methods.getSignedJwtToken = function () {
   return jwt.sign(
-    { id: this._id, email: this.email, role: 'tenant', tenant: this._id },
+    { id: this._id, email: this.email, role: this.role, tenant: this._id },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );

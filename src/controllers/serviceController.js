@@ -3,6 +3,112 @@ const Service = require('../models/Service');
 const ServiceProvider = require('../models/ServiceProvider');
 const User = require('../models/User');
 
+// NEW: Service Provider selects services they can provide
+exports.selectServices = async (req, res, next) => {
+  try {
+    const { serviceIds } = req.body; // Array of service IDs
+    
+    // ✅ CHECK IF USER IS SERVICE PROVIDER
+    if (req.user.role !== 'service_provider') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only service providers can select services'
+      });
+    }
+
+    // ✅ VERIFY SERVICES BELONG TO THE SAME TENANT
+    const services = await Service.find({
+      _id: { $in: serviceIds },
+      tenant: req.user.tenant
+    });
+
+    if (services.length !== serviceIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Some services not found or unauthorized'
+      });
+    }
+
+    // ✅ ADD SERVICE PROVIDER TO SERVICES
+    await Service.updateMany(
+      { _id: { $in: serviceIds } },
+      { $addToSet: { providers: req.user._id } }
+    );
+
+    res.json({
+      success: true,
+      message: 'Services selected successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// NEW: Service Provider removes themselves from services
+exports.unselectServices = async (req, res, next) => {
+  try {
+    const { serviceIds } = req.body;
+    
+    if (req.user.role !== 'service_provider') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only service providers can unselect services'
+      });
+    }
+
+    // ✅ REMOVE SERVICE PROVIDER FROM SERVICES
+    await Service.updateMany(
+      { _id: { $in: serviceIds } },
+      { $pull: { providers: req.user._id } }
+    );
+
+    res.json({
+      success: true,
+      message: 'Services unselected successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// NEW: GET AVAILABLE SERVICES FOR SERVICE PROVIDER TO SELECT
+exports.getAvailableServices = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'service_provider') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only service providers can access this endpoint'
+      });
+    }
+
+    // Get all active services in the tenant
+    const services = await Service.find({
+      tenant: req.user.tenant,
+      isActive: true  // Only show active services
+    }).populate('tenant', 'name')
+      .populate('providers', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+
+    // Format response to match frontend expectations
+    const servicesWithAssets = services.map(service => {
+      const obj = service.toObject();
+      obj.assets = Array.isArray(obj.assets) ? obj.assets : [];
+      obj.isActive = service.isActive;
+      return obj;
+    });
+
+    res.json({
+      success: true,
+      count: servicesWithAssets.length,
+      services: servicesWithAssets  // Use 'services' to match your frontend
+    });
+  } catch (error) {
+    console.error('Error fetching available services:', error);
+    next(error);
+  }
+};
+
+
 // @desc    Get all services for tenant
 // @route   GET /api/services
 // @access  Private
@@ -203,6 +309,29 @@ exports.getServicesForCustomer = async (req, res, next) => {
 // @access  Private (Tenant only)
 exports.createService = async (req, res, next) => {
   try {
+    console.log('Create Service - User:', {
+      id: req.user._id,
+      role: req.user.role,
+      tenant: req.user.tenant,
+      tenantId: req.tenantId
+    });
+
+    // ✅ CHECK IF USER IS TENANT ONLY
+    if (req.user.role !== 'tenant') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only tenants can create services'
+      });
+    }
+
+    // ✅ CHECK IF TENANT CONTEXT EXISTS
+    if (!req.user.tenant && !req.tenantId && !req.user._id) {
+      return res.status(400).json({
+        success: false,
+        message: 'No tenant context found. User tenant info missing.'
+      });
+    }
+
     // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -213,8 +342,11 @@ exports.createService = async (req, res, next) => {
       });
     }
 
-    // Add tenant to req.body
-    req.body.tenant = req.tenantId;
+    // ✅ SET TENANT ID - try multiple fallbacks
+    req.body.tenant = req.user.tenant?._id || req.user.tenant || req.tenantId || req.user._id;
+    req.body.providers = []; // Initially no providers assigned
+
+    console.log('Creating service with tenant ID:', req.body.tenant);
 
     const service = await Service.create(req.body);
 
@@ -223,6 +355,7 @@ exports.createService = async (req, res, next) => {
       data: service
     });
   } catch (error) {
+    console.error('Error creating service:', error);
     next(error);
   }
 };
@@ -230,17 +363,51 @@ exports.createService = async (req, res, next) => {
 // @desc    Update service
 // @route   PUT /api/services/:id
 // @access  Private (Tenant only)
+//   try {
+//     let service = await Service.findOne({
+//       _id: req.params.id,
+//       tenant: req.tenantId
+//     });
+
+//     if (!service) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Service not found'
+//       });
+//     }
+
+//     service = await Service.findByIdAndUpdate(req.params.id, req.body, {
+//       new: true,
+//       runValidators: true
+//     });
+
+//     res.status(200).json({
+//       success: true,
+//       data: service
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 exports.updateService = async (req, res, next) => {
   try {
+    if (req.user.role !== 'tenant') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only tenants can update services'
+      });
+    }
+
+    // ✅ CHANGE THIS LINE:
     let service = await Service.findOne({
       _id: req.params.id,
-      tenant: req.tenantId
+      tenant: req.user._id // Change from req.tenantId to req.user._id
     });
 
     if (!service) {
       return res.status(404).json({
         success: false,
-        message: 'Service not found'
+        message: 'Service not found or unauthorized'
       });
     }
 
@@ -261,17 +428,49 @@ exports.updateService = async (req, res, next) => {
 // @desc    Delete service
 // @route   DELETE /api/services/:id
 // @access  Private (Tenant only)
+//   try {
+//     const service = await Service.findOne({
+//       _id: req.params.id,
+//       tenant: req.tenantId
+//     });
+
+//     if (!service) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Service not found'
+//       });
+//     }
+
+//     // Soft delete by setting isActive to false
+//     service.isActive = false;
+//     await service.save();
+
+//     res.status(200).json({
+//       success: true,
+//       message: 'Service deleted successfully'
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 exports.deleteService = async (req, res, next) => {
   try {
+    if (req.user.role !== 'tenant') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only tenants can delete services'
+      });
+    }
+
     const service = await Service.findOne({
       _id: req.params.id,
-      tenant: req.tenantId
+      tenant: req.user._id // Change from req.tenantId to req.user._id
     });
 
     if (!service) {
       return res.status(404).json({
         success: false,
-        message: 'Service not found'
+        message: 'Service not found or unauthorized'
       });
     }
 
@@ -349,6 +548,81 @@ exports.getServiceAvailability = async (req, res, next) => {
       data: availability
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ ADD THIS NEW METHOD - Get services created by a specific tenant
+exports.getServicesByTenant = async (req, res, next) => {
+  try {
+    const { tenantId } = req.params;
+    
+    // Find services created by this tenant
+    const services = await Service.find({ 
+      tenant: tenantId,
+      // Don't filter by isActive so tenant can see all their services
+    }).populate('providers', 'firstName lastName email')
+      .populate('tenant', 'name')
+      .sort({ createdAt: -1 });
+
+    const servicesWithAssets = services.map(service => {
+      const obj = service.toObject();
+      obj.assets = Array.isArray(obj.assets) ? obj.assets : [];
+      obj.isActive = service.isActive;
+      return obj;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: servicesWithAssets.length,
+      services: servicesWithAssets  // Use 'services' to match your frontend
+    });
+  } catch (error) {
+    console.error('Error fetching tenant services:', error);
+    next(error);
+  }
+};
+
+// ✅ ADD THIS NEW METHOD - Assign provider to service  
+exports.assignProviderToService = async (req, res, next) => {
+  try {
+    const { serviceId, providerId } = req.body;
+    
+    if (!serviceId || !providerId) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'serviceId and providerId are required' 
+      });
+    }
+
+    // Find the service
+    const service = await Service.findById(serviceId);
+    if (!service) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Service not found' 
+      });
+    }
+
+    // Check if provider is already assigned
+    if (service.providers.includes(providerId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Provider already assigned to this service' 
+      });
+    }
+
+    // Add provider to service
+    service.providers.push(providerId);
+    await service.save();
+
+    res.json({ 
+      success: true,
+      message: 'Provider assigned successfully', 
+      service: service 
+    });
+  } catch (error) {
+    console.error('Error assigning provider:', error);
     next(error);
   }
 };

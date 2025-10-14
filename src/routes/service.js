@@ -1,23 +1,9 @@
 const express = require('express');
 const { body } = require('express-validator');
 const serviceController = require('../controllers/serviceController');
-const { authorize, tenantIsolation } = require('../middleware/auth');
+const { authorize, tenantIsolation, protect } = require('../middleware/auth');
 
 const router = express.Router();
-
-// @route   GET /api/customers/:customerId/services
-// @desc    Get all services for a customer (all linked providers)
-// @access  Private
-router.get('/customers/:customerId', serviceController.getServicesForCustomer);
-// router.get('/customers/:customerId/services', serviceController.getServicesForCustomer);
-
-// @desc    Get services for a specific provider
-// @route   GET /api/services/providers/:providerId
-// @access  Private
-router.get('/providers/:providerId', serviceController.getServicesForProvider);
-
-// Apply tenant isolation to all routes
-router.use(tenantIsolation);
 
 // Validation rules
 const createServiceValidation = [
@@ -27,6 +13,48 @@ const createServiceValidation = [
   body('duration').isInt({ min: 5, max: 480 }).withMessage('Duration must be between 5 and 480 minutes'),
   body('pricing.basePrice').isFloat({ min: 0 }).withMessage('Base price must be a positive number')
 ];
+
+// ✅ ROUTES THAT DON'T NEED TENANT ISOLATION (put these FIRST)
+
+// @route   GET /api/services/customers/:customerId
+// @desc    Get all services for a customer (all linked providers)
+// @access  Private
+router.get('/customers/:customerId', serviceController.getServicesForCustomer);
+
+// @route   GET /api/services/providers/:providerId
+// @desc    Get services for a specific provider
+// @access  Private
+router.get('/providers/:providerId', serviceController.getServicesForProvider);
+
+// @route   GET /api/services/tenant/:tenantId
+// @desc    Get services created by a specific tenant
+// @access  Private
+router.get('/tenant/:tenantId', protect, serviceController.getServicesByTenant);
+
+// @route   GET /api/services/available
+// @desc    Get available services for service provider
+// @access  Private (Service Provider)
+router.get('/available', protect, authorize('service_provider'), serviceController.getAvailableServices);
+
+// @route   POST /api/services/assign_provider  
+// @desc    Assign provider to service
+// @access  Private (Service Provider)
+router.post('/assign_provider', protect, authorize('service_provider'), serviceController.assignProviderToService);
+
+// @route   POST /api/services/select
+// @desc    Service Provider selects services they can provide
+// @access  Private (Service Provider)
+router.post('/select', protect, authorize('service_provider'), serviceController.selectServices);
+
+// @route   POST /api/services/unselect
+// @desc    Service Provider removes themselves from services
+// @access  Private (Service Provider)
+router.post('/unselect', protect, authorize('service_provider'), serviceController.unselectServices);
+
+// ✅ ROUTES THAT NEED TENANT ISOLATION (put these AFTER tenantIsolation middleware)
+
+// Apply tenant isolation to remaining routes
+router.use(tenantIsolation);
 
 // @route   GET /api/services
 // @desc    Get all services for tenant
@@ -41,22 +69,22 @@ router.get('/:id', serviceController.getService);
 // @route   POST /api/services
 // @desc    Create new service
 // @access  Private (Tenant only)
-router.post('/', authorize('tenant', 'service_provider'), createServiceValidation, serviceController.createService);
+router.post('/', authorize('tenant'), createServiceValidation, serviceController.createService);
 
 // @route   PUT /api/services/:id
 // @desc    Update service
 // @access  Private (Tenant only)
-router.put('/:id', authorize('tenant', 'service_provider'), serviceController.updateService);
+router.put('/:id', authorize('tenant'), serviceController.updateService);
 
 // @route   DELETE /api/services/:id
 // @desc    Delete service
 // @access  Private (Tenant only)
-router.delete('/:id', authorize('tenant', 'service_provider'), serviceController.deleteService);
+router.delete('/:id', authorize('tenant'), serviceController.deleteService);
 
 // @route   PUT /api/services/:id/providers
 // @desc    Assign providers to service
 // @access  Private (Tenant only)
-router.put('/:id/providers', authorize('tenant', 'service_provider'), serviceController.assignProviders);
+router.put('/:id/providers', authorize('tenant'), serviceController.assignProviders);
 
 // @route   GET /api/services/:id/availability
 // @desc    Get service availability

@@ -2,8 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' }); 
+const upload = require('../middleware/upload'); 
 
 const router = express.Router();
 
@@ -14,10 +13,6 @@ const router = express.Router();
 //   body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
 //   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
 //   body('role').isIn(['tenant', 'service_provider', 'customer']).withMessage('Invalid role')
-// ];
-// const registerValidation = [
-//   body('data').notEmpty().withMessage('Registration data is required'),
-//   // Remove individual field validations since they're all in 'data' now
 // ];
 const registerValidation = [
   body('data').notEmpty().withMessage('Registration data is required'),

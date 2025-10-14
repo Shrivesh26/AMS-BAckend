@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const connectDB = require('./config/database');
+const path = require('path');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -32,6 +33,7 @@ app.use(helmet());
 //   credentials: true
 // }));
 app.use(cors());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Rate limiting
 const limiter = rateLimit({
