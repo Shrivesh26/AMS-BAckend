@@ -7,7 +7,7 @@ const upload = require('../middleware/upload'); // ✅ Add upload middleware
 router.use(protect);
 
 // ✅ ADD IMAGE UPLOAD ROUTE
-router.post('/upload', upload.single('image'), assetController.uploadAssetImage);
+router.post('/uploads', upload.single('image'), assetController.uploadAssetImage);
 
 router.post('/', authorize('tenant'), assetController.createAsset);
 

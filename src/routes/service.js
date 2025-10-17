@@ -14,8 +14,6 @@ const createServiceValidation = [
   body('pricing.basePrice').isFloat({ min: 0 }).withMessage('Base price must be a positive number')
 ];
 
-// ✅ ROUTES THAT DON'T NEED TENANT ISOLATION (put these FIRST)
-
 // @route   GET /api/services/customers/:customerId
 // @desc    Get all services for a customer (all linked providers)
 // @access  Private
@@ -50,8 +48,6 @@ router.post('/select', protect, authorize('service_provider'), serviceController
 // @desc    Service Provider removes themselves from services
 // @access  Private (Service Provider)
 router.post('/unselect', protect, authorize('service_provider'), serviceController.unselectServices);
-
-// ✅ ROUTES THAT NEED TENANT ISOLATION (put these AFTER tenantIsolation middleware)
 
 // Apply tenant isolation to remaining routes
 router.use(tenantIsolation);

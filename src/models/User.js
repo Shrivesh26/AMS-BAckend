@@ -104,7 +104,7 @@ userSchema.methods.getSignedJwtToken = function() {
     { 
       id: this._id,
       tenant: this.tenant,
-      role: this.role
+      role: this.role 
     },
     process.env.JWT_SECRET,
     {

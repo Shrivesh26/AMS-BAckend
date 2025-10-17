@@ -363,32 +363,6 @@ exports.createService = async (req, res, next) => {
 // @desc    Update service
 // @route   PUT /api/services/:id
 // @access  Private (Tenant only)
-//   try {
-//     let service = await Service.findOne({
-//       _id: req.params.id,
-//       tenant: req.tenantId
-//     });
-
-//     if (!service) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'Service not found'
-//       });
-//     }
-
-//     service = await Service.findByIdAndUpdate(req.params.id, req.body, {
-//       new: true,
-//       runValidators: true
-//     });
-
-//     res.status(200).json({
-//       success: true,
-//       data: service
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 exports.updateService = async (req, res, next) => {
   try {
     if (req.user.role !== 'tenant') {
@@ -428,31 +402,6 @@ exports.updateService = async (req, res, next) => {
 // @desc    Delete service
 // @route   DELETE /api/services/:id
 // @access  Private (Tenant only)
-//   try {
-//     const service = await Service.findOne({
-//       _id: req.params.id,
-//       tenant: req.tenantId
-//     });
-
-//     if (!service) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'Service not found'
-//       });
-//     }
-
-//     // Soft delete by setting isActive to false
-//     service.isActive = false;
-//     await service.save();
-
-//     res.status(200).json({
-//       success: true,
-//       message: 'Service deleted successfully'
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 exports.deleteService = async (req, res, next) => {
   try {
     if (req.user.role !== 'tenant') {
@@ -555,12 +504,14 @@ exports.getServiceAvailability = async (req, res, next) => {
 // ✅ ADD THIS NEW METHOD - Get services created by a specific tenant
 exports.getServicesByTenant = async (req, res, next) => {
   try {
-    const { tenantId } = req.params;
+    const tenantId = req.params.tenantId;
     
-    // Find services created by this tenant
+    if (!tenantId || !tenantId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid tenant ID' });
+    }    
+    
     const services = await Service.find({ 
       tenant: tenantId,
-      // Don't filter by isActive so tenant can see all their services
     }).populate('providers', 'firstName lastName email')
       .populate('tenant', 'name')
       .sort({ createdAt: -1 });
@@ -575,7 +526,7 @@ exports.getServicesByTenant = async (req, res, next) => {
     res.status(200).json({
       success: true,
       count: servicesWithAssets.length,
-      services: servicesWithAssets  // Use 'services' to match your frontend
+      services: servicesWithAssets
     });
   } catch (error) {
     console.error('Error fetching tenant services:', error);

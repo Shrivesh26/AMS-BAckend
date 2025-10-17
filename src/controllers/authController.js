@@ -85,7 +85,7 @@ exports.register = async (req, res, next) => {
         business: tenantData.business,
         address: tenantData.address,
         settings: tenantData.settings,
-        avatarUrl: avatarUrl  // ✅ ADD THIS LINE
+        avatarUrl: avatarUrl
       });
 
       // Don't create a user if it's just a tenant registration
@@ -235,14 +235,46 @@ exports.login = async (req, res, next) => {
 // @access  Private
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).populate('tenant');
+    // Fetch whichever model holds this user
+    let user = await User.findById(req.user.id).populate('tenant').lean();
+    let isTenantUser = false;
+
+    if (!user) {
+      user = await ServiceProvider.findById(req.user.id).populate('tenant').lean();
+    }
     
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    next(error);
+    if (!user) {
+      user = await Tenant.findById(req.user.id).lean();
+      isTenantUser = true; // ✅ Mark that this IS a tenant user
+    }
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Normalize avatarUrl across all models
+    const avatarUrl =
+      // User and ServiceProvider store under profile.avatar
+      (user.profile && user.profile.avatar) ||
+      // Tenant stores directly as avatarUrl
+      user.avatarUrl ||
+      null;
+
+    // Attach back to returned object
+    user.avatarUrl = avatarUrl;
+    
+    // ✅ FIX: If this IS a tenant user, set tenant field to their own ID
+    if (isTenantUser) {
+      user.tenant = user._id;
+    }
+    
+    // Remove the old profile field if you like
+    delete user.profile;
+
+    return res.status(200).json({ success: true, data: user });
+  } catch (err) {
+    console.error('Error in getMe:', err);
+    next(err);
   }
 };
 

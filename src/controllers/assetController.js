@@ -3,9 +3,6 @@ const Asset = require('../models/Asset');
 // ✅ ADD IMAGE UPLOAD HANDLER
 exports.uploadAssetImage = async (req, res) => {
   try {
-    console.log('🖼️ Uploading asset image');
-    console.log('📁 req.file:', req.file);
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -15,8 +12,6 @@ exports.uploadAssetImage = async (req, res) => {
 
     const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
 
-    console.log('✅ Generated image URL:', imageUrl);
-
     res.status(200).json({
       success: true,
       data: {
@@ -25,7 +20,6 @@ exports.uploadAssetImage = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Image upload error:', error);
     res.status(500).json({
       success: false,
       message: 'Error uploading image',
@@ -37,14 +31,8 @@ exports.uploadAssetImage = async (req, res) => {
 // Create Asset - ONLY TENANTS CAN CREATE
 exports.createAsset = async (req, res) => {
   try {
-    console.log('🔍 req.user:', req.user);
-    console.log('🔍 req.user.role:', req.user.role);
-    console.log('🔍 req.user._id:', req.user._id);
-    console.log('🔍 req.body:', req.body); // ✅ Log request body
-
     // ✅ CHECK IF USER IS TENANT ONLY
     if (req.user.role !== 'tenant') {
-      console.log('❌ Access denied. User role:', req.user.role);
       return res.status(403).json({ 
         success: false, // ✅ Add success field
         message: 'Only tenants can create assets' 
@@ -92,18 +80,12 @@ exports.createAsset = async (req, res) => {
       tenant: req.user._id 
     };
 
-    console.log('📝 Creating asset with data:', assetData);
-
     const asset = await Asset.create(assetData);
-    
-    console.log('✅ Asset created successfully:', asset._id);
-
     res.status(201).json({
       success: true, // ✅ Add success field for consistency
       data: asset
     });
   } catch (err) {
-    console.error('❌ Asset creation error:', err);
     res.status(400).json({ 
       success: false,
       message: err.message 
@@ -140,7 +122,6 @@ exports.getAssets = async (req, res) => {
       assets 
     });
   } catch (err) {
-    console.error('❌ Get assets error:', err);
     res.status(500).json({ 
       success: false,
       message: err.message 
@@ -173,7 +154,6 @@ exports.getAsset = async (req, res) => {
       data: asset
     });
   } catch (err) {
-    console.error('❌ Get asset error:', err);
     res.status(500).json({ 
       success: false,
       message: err.message 
@@ -184,9 +164,6 @@ exports.getAsset = async (req, res) => {
 // Update Asset - ONLY TENANT CAN UPDATE
 exports.updateAsset = async (req, res) => {
   try {
-    console.log('🔄 Updating asset:', req.params.id);
-    console.log('🔍 Update data:', req.body);
-
     // ✅ CHECK IF USER IS TENANT
     if (req.user.role !== 'tenant') {
       return res.status(403).json({ 
@@ -224,14 +201,11 @@ exports.updateAsset = async (req, res) => {
       });
     }
 
-    console.log('✅ Asset updated successfully');
-    
     res.json({
       success: true,
       data: asset
     });
   } catch (err) {
-    console.error('❌ Update asset error:', err);
     res.status(400).json({ 
       success: false,
       message: err.message 
@@ -242,8 +216,6 @@ exports.updateAsset = async (req, res) => {
 // Delete Asset - ONLY TENANT CAN DELETE
 exports.deleteAsset = async (req, res) => {
   try {
-    console.log('🗑️ Deleting asset:', req.params.id);
-
     // ✅ CHECK IF USER IS TENANT
     if (req.user.role !== 'tenant') {
       return res.status(403).json({ 
@@ -264,14 +236,11 @@ exports.deleteAsset = async (req, res) => {
       });
     }
 
-    console.log('✅ Asset deleted successfully');
-    
     res.json({
       success: true,
       message: 'Asset deleted successfully'
     });
   } catch (err) {
-    console.error('❌ Delete asset error:', err);
     res.status(500).json({ 
       success: false,
       message: err.message 
