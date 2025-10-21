@@ -7,7 +7,6 @@ const Tenant = require('../models/Tenant');
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res, next) => {
-  console.log('Received registration body:', req.body +" "+ req.file);
   try {
     // Handle validation errors
     const errors = validationResult(req);
@@ -52,20 +51,36 @@ exports.register = async (req, res, next) => {
       }
     }
 
-    let tenant = null;
+    // ✅ ADD SUBDOMAIN CHECK FOR TENANTS
+    if (role === 'tenant' && tenantData?.subdomain) {
+      const existingSubdomain = await Tenant.findOne({ subdomain: tenantData.subdomain });
+      if (existingSubdomain) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Subdomain is already taken. Please choose another.' 
+        });
+      }
+    }
 
-    // ✅ PROCESS AVATAR FOR ALL ROLES
+    let tenant = null;
+    // ✅ IMPROVED VERSION with better error handling
     const avatarFile = req.file;
-    let avatarUrl = '';
+    let avatarUrl = null; // Changed from '' to null for consistency
+
     if (avatarFile) {
+      // Validate file exists
       avatarUrl = `${req.protocol}://${req.get('host')}/uploads/${avatarFile.filename}`;
     } else if (data.profile?.avatar) {
+      // Fallback to provided URL
       avatarUrl = data.profile.avatar;
     }
 
+    // Create profile object with null check
     const profile = {
       avatar: avatarUrl,
-      bio: data.profile?.bio || ''
+      bio: data.profile?.bio || '',
+      ...(data.profile?.specializations && { specializations: data.profile.specializations }),
+      ...(data.profile?.experience && { experience: data.profile.experience })
     };
 
     if (role === 'tenant') {
@@ -77,10 +92,11 @@ exports.register = async (req, res, next) => {
       tenant = await Tenant.create({
         firstName,
         lastName,
+        role: 'tenant',
         name: tenantData.name,
         subdomain: tenantData.subdomain,
         email,
-        password: tenantData.password,
+        password: password,
         phone: tenantData.phone,
         business: tenantData.business,
         address: tenantData.address,
@@ -121,6 +137,7 @@ exports.register = async (req, res, next) => {
         email,
         password,
         phone: data.phone,
+        role: 'service_provider',
         tenant: tenant._id,
         bio: profile.bio,
         specializations: data.profile?.specializations || [],
@@ -233,45 +250,111 @@ exports.login = async (req, res, next) => {
 // @desc    Get current logged in user
 // @route   GET /api/auth/me
 // @access  Private
+// exports.getMe = async (req, res, next) => {
+//   try {
+//     // Fetch whichever model holds this user
+//     let user = await User.findById(req.user.id).populate('tenant').lean();
+//     let isTenantUser = false;
+
+//     if (!user) {
+//       user = await ServiceProvider.findById(req.user.id).populate('tenant').lean();
+//     }
+    
+//     if (!user) {
+//       user = await Tenant.findById(req.user.id).lean();
+//       isTenantUser = true; // ✅ Mark that this IS a tenant user
+//     }
+    
+//     if (!user) {
+//       return res.status(404).json({ success: false, message: 'User not found' });
+//     }
+
+//     // Normalize avatarUrl across all models
+//     const avatarUrl =
+//       // User and ServiceProvider store under profile.avatar
+//       (user.profile && user.profile.avatar) ||
+//       // Tenant stores directly as avatarUrl
+//       user.avatarUrl ||
+//       null;
+
+//     // Attach back to returned object
+//     user.avatarUrl = avatarUrl;
+    
+//     // ✅ FIX: If this IS a tenant user, set tenant field to their own ID
+//     if (isTenantUser) {
+//       user.tenant = user._id;
+//     }
+    
+//     // Remove the old profile field if you like
+//     delete user.profile;
+
+//     return res.status(200).json({ success: true, data: user });
+//   } catch (err) {
+//     console.error('Error in getMe:', err);
+//     next(err);
+//   }
+// };
+// ✅ IMPROVED VERSION
 exports.getMe = async (req, res, next) => {
   try {
-    // Fetch whichever model holds this user
     let user = await User.findById(req.user.id).populate('tenant').lean();
-    let isTenantUser = false;
+    let userType = 'user';
 
     if (!user) {
       user = await ServiceProvider.findById(req.user.id).populate('tenant').lean();
+      userType = 'service_provider';
     }
     
     if (!user) {
       user = await Tenant.findById(req.user.id).lean();
-      isTenantUser = true; // ✅ Mark that this IS a tenant user
+      userType = 'tenant';
     }
     
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Normalize avatarUrl across all models
-    const avatarUrl =
-      // User and ServiceProvider store under profile.avatar
-      (user.profile && user.profile.avatar) ||
-      // Tenant stores directly as avatarUrl
-      user.avatarUrl ||
-      null;
+    // Normalize response structure across all models
+    const response = {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phone: user.phone,
+      role: user.role || userType,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      
+      // Handle avatar from different sources
+      avatarUrl: user.profile?.avatar || user.avatarUrl || null,
+      
+      // Handle tenant relationship
+      tenant: userType === 'tenant' ? user._id : (user.tenant?._id || user.tenant || null),
+      
+      // Include type-specific fields
+      ...(userType === 'service_provider' && {
+        bio: user.bio,
+        specializations: user.specializations,
+        experience: user.experience,
+        availability: user.availability,
+        rating: user.profile?.rating
+      }),
+      
+      ...(userType === 'tenant' && {
+        name: user.name,
+        subdomain: user.subdomain,
+        business: user.business,
+        subscription: user.subscription,
+        settings: user.settings
+      }),
+      
+      // Common fields
+      address: user.address,
+      preferences: user.preferences
+    };
 
-    // Attach back to returned object
-    user.avatarUrl = avatarUrl;
-    
-    // ✅ FIX: If this IS a tenant user, set tenant field to their own ID
-    if (isTenantUser) {
-      user.tenant = user._id;
-    }
-    
-    // Remove the old profile field if you like
-    delete user.profile;
-
-    return res.status(200).json({ success: true, data: user });
+    return res.status(200).json({ success: true, data: response });
   } catch (err) {
     console.error('Error in getMe:', err);
     next(err);
@@ -422,35 +505,84 @@ exports.logout = async (req, res, next) => {
   }
 };
 
+// const sendTokenResponse = (user, statusCode, res) => {
+//   // Generate token from the model's method
+//   const token = user.getSignedJwtToken();
+
+//   // Determine the role: fallback to "tenant" if undefined
+//   const role = user.role || 'tenant';
+
+//   // Determine tenant ID
+//   const tenantId = user.tenant?._id || user.tenant || (role === 'tenant' ? user._id : null);
+
+//   // ✅ GET AVATAR FROM DIFFERENT SOURCES BASED ON MODEL
+//   let avatar = null;
+//   if (user.profile?.avatar) {
+//     avatar = user.profile.avatar;  // For User and ServiceProvider
+//   } else if (user.avatarUrl) {
+//     avatar = user.avatarUrl;       // For Tenant
+//   }
+
+//   res.status(statusCode).json({
+//     success: true,
+//     token,
+//     data: {
+//       id: user._id,
+//       firstName: user.firstName || '', 
+//       lastName: user.lastName || '',
+//       email: user.email,
+//       role,
+//       tenant: tenantId,
+//       avatarUrl: avatar  // ✅ CHANGED FROM 'avatar' to 'avatarUrl' FOR CONSISTENCY
+//     }
+//   });
+// };
+// ✅ IMPROVED VERSION
 const sendTokenResponse = (user, statusCode, res) => {
-  // Generate token from the model's method
   const token = user.getSignedJwtToken();
-
-  // Determine the role: fallback to "tenant" if undefined
-  const role = user.role || 'tenant';
-
-  // Determine tenant ID
-  const tenantId = user.tenant?._id || user.tenant || (role === 'tenant' ? user._id : null);
-
-  // ✅ GET AVATAR FROM DIFFERENT SOURCES BASED ON MODEL
-  let avatar = null;
-  if (user.profile?.avatar) {
-    avatar = user.profile.avatar;  // For User and ServiceProvider
-  } else if (user.avatarUrl) {
-    avatar = user.avatarUrl;       // For Tenant
+  const role = user.role || 'customer';
+  
+  // Determine tenant ID based on role
+  let tenantId = null;
+  if (role === 'tenant') {
+    tenantId = user._id; // Tenant's own ID
+  } else if (user.tenant) {
+    tenantId = user.tenant._id || user.tenant; // Populated or ID
   }
+
+  // Get avatar from appropriate field
+  const avatarUrl = user.profile?.avatar || user.avatarUrl || null;
+
+  // ✅ Consistent response structure
+  const responseData = {
+    id: user._id,
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    email: user.email,
+    phone: user.phone || '',
+    role: role,
+    tenant: tenantId,
+    avatarUrl: avatarUrl,
+    
+    // Add tenant-specific fields if role is tenant
+    ...(role === 'tenant' && {
+      name: user.name,
+      subdomain: user.subdomain,
+      business: user.business,
+      settings: user.settings
+    }),
+    
+    // Add service provider specific fields
+    ...(role === 'service_provider' && {
+      bio: user.bio,
+      specializations: user.specializations,
+      experience: user.experience
+    })
+  };
 
   res.status(statusCode).json({
     success: true,
     token,
-    data: {
-      id: user._id,
-      firstName: user.firstName || '', 
-      lastName: user.lastName || '',
-      email: user.email,
-      role,
-      tenant: tenantId,
-      avatarUrl: avatar  // ✅ CHANGED FROM 'avatar' to 'avatarUrl' FOR CONSISTENCY
-    }
+    data: responseData
   });
 };
