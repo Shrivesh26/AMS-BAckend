@@ -303,7 +303,6 @@ exports.getServicesForCustomer = async (req, res, next) => {
   }
 };
 
-
 // @desc    Create new service
 // @route   POST /api/services
 // @access  Private (Tenant only)

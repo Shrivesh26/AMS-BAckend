@@ -8,6 +8,9 @@ const Tenant = require('../models/Tenant');
 // @access  Public
 exports.register = async (req, res, next) => {
   try {
+    console.log('📥 Registration request received');
+    console.log('📋 Request body:', req.body);
+    console.log('📁 Request file:', req.file);
     // Handle validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

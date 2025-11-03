@@ -32,7 +32,8 @@ exports.createProvider = async (req, res, next) => {
 exports.getProviders = async (req, res, next) => {
   try {
     let query = { isActive: true };
-    if (req.user.role !== 'admin') query.tenant = req.user.tenant;
+    // if (req.user.role !== 'admin') query.tenant = req.user.tenant;
+    if (req.user.role !== 'admin') query.tenant = req.tenantId;
     if (req.query.name) {
       query.$or = [
         { firstName: { $regex: req.query.name, $options: 'i' } },
